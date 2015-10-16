@@ -1,0 +1,10 @@
+#!/usr/bin/env php
+<?php
+
+use Simples\ProcessManager\Application\ConsoleApplication;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$application = new ConsoleApplication();
+
+$application->run();

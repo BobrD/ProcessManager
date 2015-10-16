@@ -1,0 +1,16 @@
+{
+  "chmod": "0755",
+  "directories": [
+    "src"
+  ],
+  "finder": [
+    {
+      "name": "*.php",
+      "exclude": ["Tests", "tests"],
+      "in": "vendor"
+    }
+  ],
+  "main": "bin/processmanager",
+  "output": "processmanager.phar",
+  "stub": true
+}
