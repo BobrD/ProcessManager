@@ -113,7 +113,7 @@ class Manager
      */
     public function run()
     {
-        $this->fork();
+        //$this->fork();
         $this->runProcesses();
         $this->startLoop();
     }

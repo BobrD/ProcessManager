@@ -5,7 +5,7 @@
         "symfony/process": "^2.7",
         "symfony/console": "~2.7",
         "react/stomp": "0.2.0",
-        "psr/log": "dev-master",
+        "psr/log": "1.0.*@dev",
         "monolog/monolog": "^1.17",
         "jeremeamia/superclosure": "~2.0"
     },
