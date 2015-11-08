@@ -30,9 +30,9 @@ class ManagerTest extends \PHPUnit_Framework_TestCase
             $manager->stop();
         })));
 
-        $manager->run();
+        $manager->start();
 
-        $running = $manager->getRunningProcess();
+        $running = $manager->getRunningProcesses();
 
         $this->assertCount(1, $running);
     }

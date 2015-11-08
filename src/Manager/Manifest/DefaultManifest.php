@@ -60,7 +60,7 @@ class DefaultManifest implements ManifestInterface
      */
     public function newProcess()
     {
-        return $this->processes[] = $newProcess = clone $this->processes[0];
+        return $this->processes[] = clone $this->processes[0];
     }
 
     /**

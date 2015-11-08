@@ -9,7 +9,7 @@ class Response
     const STATUS_ERROR = 'error';
 
     /**
-     * @var string
+     * @var array
      */
     private $data;
 
@@ -18,14 +18,14 @@ class Response
      */
     private $status;
 
-    public function __construct($data = '', $status = self::STATUS_OK)
+    public function __construct($data = [], $status = self::STATUS_OK)
     {
         $this->data = $data;
         $this->status = $status;
     }
 
     /**
-     * @return string
+     * @return array
      */
     public function data()
     {

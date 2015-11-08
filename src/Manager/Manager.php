@@ -9,6 +9,7 @@ use React\Stomp\Protocol\Frame;
 use Simples\ProcessManager\Exception\ManagerException;
 use Simples\ProcessManager\Manager\Manifest\ManifestInterface;
 use Simples\ProcessManager\Manager\Manifest\NullProcess;
+use Simples\ProcessManager\Manager\Manifest\ProvisionInterface;
 use Simples\ProcessManager\Message\MessageTransformer;
 use Simples\ProcessManager\Message\Response;
 use Simples\ProcessManager\Rpc\RpcClient;
@@ -27,6 +28,11 @@ class Manager
      * @var array|ManifestInterface[]
      */
     private $manifests = [];
+
+    /**
+     * @var array|ProvisionInterface[]
+     */
+    private $nextProvision = [];
 
     /**
      * @var array|Process[]
@@ -69,6 +75,11 @@ class Manager
     private $channel;
 
     /**
+     * @var Pidfile
+     */
+    private $pidfile;
+
+    /**
      * @param LoggerInterface $logger
      * @param RpcClient $rpcClient
      * @param MessageTransformer $messageTransformer
@@ -90,6 +101,7 @@ class Manager
         $this->stompFactory = $stompFactory;
         $this->loop = $loop;
         $this->channel = $channel;
+        $this->pidfile = new Pidfile('ppm_' . $channel);
     }
 
     /**
@@ -98,6 +110,11 @@ class Manager
     public function addManifest(ManifestInterface $manifest)
     {
         $this->manifests[$manifest->getName()] = $manifest;
+    }
+
+    public function addNextProvision(ProvisionInterface $provisionInterface)
+    {
+        $this->nextProvision[] = $provisionInterface;
     }
 
     /**
@@ -111,9 +128,10 @@ class Manager
     /**
      * Запуск менеджера
      */
-    public function run()
+    public function start()
     {
-        //$this->fork();
+        $this->fork();
+        $this->pidfile->initialize();
         $this->runProcesses();
         $this->startLoop();
     }
@@ -122,6 +140,136 @@ class Manager
     {
         $this->stopProcess();
         $this->stopLoop();
+        $this->pidfile->finalize();
+    }
+
+    /**
+     * Start all process
+     */
+    public function runProcesses()
+    {
+        foreach ($this->manifests as $manifest) {
+            foreach ($manifest->getProcesses() as $process) {
+                $this->runProcess($process);
+            }
+        }
+    }
+
+    /**
+     * Создаёт ещё один процесс для манифеста
+     *
+     * @param string $manifestName
+     */
+    public function startNewProcess($manifestName)
+    {
+        if (isset($this->manifests[$manifestName])) {
+            $newProcess = $this->manifests[$manifestName]->newProcess();
+            $this->runProcess($newProcess);
+        }
+    }
+
+    /**
+     * Reload
+     */
+    public function reloadProcess()
+    {
+        $this->stopProcess();
+        $this->runProcesses();
+    }
+
+    /**
+     * Stop all process
+     */
+    public function stopProcess()
+    {
+        foreach ($this->getRunningProcesses() as $process) {
+            $commandLine = $process->getCommandLine();
+
+            try {
+                if (!$process->isRunning()) {
+                    continue;
+                }
+
+                $exitCode = $process->stop();
+                $this->logger->info(sprintf('Остановлен процесс (cmd %s), код выхода %d', $commandLine, $exitCode));
+            } catch (RuntimeException $e) {
+                $this->logger->critical(sprintf(
+                    'Неудалось отсновить процес (cmd %s), exception: %s, trace: %s',
+                    $commandLine,
+                    $e->getMessage(),
+                    $e->getTraceAsString()
+                ));
+            }
+        }
+    }
+
+    /**
+     * @param Process $process
+     */
+    public function runProcess(Process $process)
+    {
+        $commandLine = $process->getCommandLine();
+        $cwd = $process->getWorkingDirectory();
+        $input = $process->getInput();
+
+        try {
+            // @sea https://github.com/symfony/symfony/issues/5759
+            if (false === strpos($commandLine, 'exec ')) {
+                $commandLine = 'exec ' . $commandLine;
+            }
+
+            $process->setCommandLine($commandLine);
+
+            $process->start();
+
+            $this->runningProcess[spl_object_hash($process)] = $process;
+
+            $this->logger->info(sprintf(
+                'Запустили процес (cmd %s, cwd %s, input %s)',
+                $commandLine,
+                $cwd,
+                $input
+            ));
+
+        } catch (RuntimeException $e) {
+            $this->logger->critical(sprintf(
+                'Неудалось запустить процес (cmd %s, cwd %s, input %s) exception: %s, trace: %s',
+                $commandLine,
+                $cwd,
+                $input,
+                $e->getMessage(),
+                $e->getTraceAsString()
+            ));
+        }
+    }
+
+    /**
+     * @return LoggerInterface
+     */
+    public function getLogger()
+    {
+        return $this->logger;
+    }
+
+    /**
+     * @return array|Process[]
+     */
+    public function getRunningProcesses()
+    {
+        return $this->runningProcess;
+    }
+
+    private function fork()
+    {
+        // Форкаем процесс
+        $pid = pcntl_fork();
+
+        if ($pid == -1) {
+            die('Error with manager');
+        } elseif ($pid) {
+            // Убиваем родительский процес
+            exit;
+        }
     }
 
     /**
@@ -180,118 +328,18 @@ class Manager
      */
     public function provision()
     {
+        foreach ($this->nextProvision as $provision) {
+            $provision->provision($this);
+        }
+
+        $this->nextProvision = [];
+
         foreach ($this->manifests as $manifest) {
             try {
                 $manifest->getProvision()->provision($this);
             } catch (\Exception $e) {
                 $this->logger->critical($e->getMessage());
             }
-        }
-    }
-
-    /**
-     * Start all process
-     */
-    public function runProcesses()
-    {
-        foreach ($this->manifests as $manifest) {
-            foreach ($manifest->getProcesses() as $process) {
-                $this->runProcess($process);
-            }
-        }
-    }
-
-    /**
-     * Создаёт ещё один процесс для манифеста
-     *
-     * @param string $manifestName
-     */
-    public function startNewProcess($manifestName)
-    {
-        if (isset($this->manifests[$manifestName])) {
-            $newProcess = $this->manifests[$manifestName]->newProcess();
-            $this->runProcess($newProcess);
-        }
-    }
-
-    /**
-     * Reload
-     */
-    public function reloadProcess()
-    {
-        $this->stopProcess();
-        $this->runProcesses();
-    }
-
-    /**
-     * Stop all process
-     */
-    public function stopProcess()
-    {
-        foreach ($this->getRunningProcess() as $process) {
-            $commandLine = $process->getCommandLine();
-
-            try {
-                if ($process->isRunning()) {
-                    continue;
-                }
-
-                $exitCode = $process->stop();
-                $this->logger->info(sprintf('Остановлен процесс (cmd %s), код выхода %d', $commandLine, $exitCode));
-            } catch (RuntimeException $e) {
-                $this->logger->critical(sprintf('Неудалось отсновить процес (cmd %s)', $commandLine));
-            }
-        }
-    }
-
-    /**
-     * @param Process $process
-     */
-    public function runProcess(Process $process)
-    {
-        $commandLine = $process->getCommandLine();
-        $cwd = $process->getWorkingDirectory();
-        $input = $process->getInput();
-
-        try {
-            $process->start();
-
-            $this->runningProcess[spl_object_hash($process)] = $process;
-
-            $this->logger->info(sprintf('Запустили процес (cmd %s, cwd %s, input %s)', $commandLine, $cwd, $input));
-
-            $this->runningProcess[spl_object_hash($process)] = $process;
-        } catch (RuntimeException $e) {
-            $this->logger->critical(sprintf('Неудалось отсновить процес (cmd %s, cwd %s, input %s)', $commandLine, $cwd, $input));
-        }
-    }
-
-    /**
-     * @return LoggerInterface
-     */
-    public function getLogger()
-    {
-        return $this->logger;
-    }
-
-    /**
-     * @return array|Process[]
-     */
-    public function getRunningProcess()
-    {
-        return $this->runningProcess;
-    }
-
-    private function fork()
-    {
-        // Форкаем процесс
-        $pid = pcntl_fork();
-
-        if ($pid == -1) {
-            die('Error with manager');
-        } elseif ($pid) {
-            // Убиваем родительский процес
-            exit;
         }
     }
 }

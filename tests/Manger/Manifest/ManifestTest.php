@@ -23,11 +23,11 @@ class ManifestTest extends \PHPUnit_Framework_TestCase
     {
         $manifest = new DefaultManifest('test');
 
-        $this->assertInstanceOf(NullProcess::class, $manifest->getProcess());
+        $this->assertInstanceOf(NullProcess::class, $manifest->getProcesses()[0]);
         $this->assertInstanceOf(NullProvision::class, $manifest->getProvision());
     }
 
-    public function testGet()
+    public function testGetters()
     {
         $provision = new CallbackProvision(function (){});
         $process = new Process('');
@@ -35,7 +35,7 @@ class ManifestTest extends \PHPUnit_Framework_TestCase
 
         $this->assertEquals('test', $manifest->getName());
         $this->assertEquals($provision, $manifest->getProvision());
-        $this->assertEquals($process, $manifest->getProcess());
+        $this->assertEquals([$process], $manifest->getProcesses());
     }
 }
 
