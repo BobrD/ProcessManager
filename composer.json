@@ -1,6 +1,7 @@
 {
     "name": "simples/processmanager",
     "description": "Process manager for steptotravel",
+    "minimum-stability": "stable",
     "require": {
         "symfony/process": "^2.7",
         "symfony/console": "~2.7",
