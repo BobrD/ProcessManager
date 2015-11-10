@@ -6,11 +6,11 @@
   "finder": [
     {
       "name": "*.php",
-      "exclude": ["Tests", "tests"],
+      "exclude": ["Tests", "tests", "examples"],
       "in": "vendor"
     }
   ],
   "main": "bin/processmanager",
-  "output": "processmanager.phar",
+  "output": "bin/processmanager.phar",
   "stub": true
 }

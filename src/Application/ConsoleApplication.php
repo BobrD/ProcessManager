@@ -21,9 +21,9 @@ class ConsoleApplication extends Application
 
         $this->add(new InstallCommand());
         $this->add(new StartCommand());
-        $this->add(new InfoCommand());
         $this->add(new StopCommand());
         $this->add(new RestartCommand());
+        $this->add(new InfoCommand());
         $this->add(new AddProcessCommand());
     }
 }

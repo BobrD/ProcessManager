@@ -10,7 +10,7 @@ class StartCommand extends AbstractControlCommand
 {
     protected function configure()
     {
-        $this->setName('control:stop');
+        $this->setName('control:start');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
